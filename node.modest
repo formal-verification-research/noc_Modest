@@ -1,43 +1,29 @@
 const int BUFFERLENGTH = 4;
 const int clkLower = 100; 
-const int clkUpper = 104;
+const int clkUpper = 102;
 int(clkLower..clkUpper) clk;
 
-datatype intlist = { int hd, intlist option tl };
+datatype intlist = { int(0..3) hd, intlist option tl };
 
-datatype buffer = {int(-1..3) val, int(0..3) id, bool serviced, int(0..3) priority, int(0..(clkUpper-clkLower)) timesServiced};		//Datatype for a buffer with the next buffer value, id of the buffer, whether the buffer was serviced last clock cycle or not, and the priority number of the buffer
-int(0..3) unserviced;		//Number of unserviced buffers, iterates down when unserviced buffer's priority is set
-int(0..3) totalUnserviced;	//Total number of unserviced buffers in a clock cycle
+datatype buffer = {int(-1..3) val, int(0..3) id, bool serviced, int(0..3) priority, int timesServiced, intlist option buff};		//Datatype for a buffer with the next buffer value, id of the buffer, whether the buffer was serviced last clock cycle or not, and the priority number of the buffer
+int(0..2) unserviced;		//Number of unserviced buffers, iterates down when unserviced buffer's priority is set
+int(0..2) totalUnserviced;	//Total number of unserviced buffers in a clock cycle
 int(0..((clkUpper-clkLower)*4)) totalServiced = 0;
-int(0..(clkUpper-clkLower)) optimalRuns = 0;
+int(0..(clkUpper-clkLower))optimalRuns = 0;
 
-int(-1..3) v;
-
-/*
-intlist option northB = some(intlist { hd: 1, tl: none });
-intlist option eastB = some(intlist { hd: 2, tl: none });
-intlist option southB = some(intlist { hd: 3, tl: none });
-intlist option westB = some(intlist { hd: 0, tl: none });
-*/
-
-intlist option northB = none;
-intlist option eastB = none;
-intlist option southB = none;
-intlist option westB = none;
-
+//intlist option buff = none;
 
 buffer north, east, south, west;
 
 buffer[] a; 	//Array of the four buffers. a[0] is the highest priority
 buffer[] temp;		//Temporary buffer used to update buffer a
 
-
 action tick;
 
 // ------ Begin: properties ---------
 property Pr1 = Pmax(<> (clk >= clkUpper));
 
-property TotalServiced = Pmax(<> (totalServiced >= ((clkUpper-clkLower)*3)));		//Probablility that the arbiter servieces at a 75% efficiency
+property TotalServiced = Pmax(<> (totalServiced >= ((clkUpper-clkLower)*3)));		//Probablility that the arbiter servieces at least 15 buffers out of a possible 20. probablity the arbiter is at least 75% efficient
 
 /*
 property northServiced = Pmax(<> (north.timesServiced >= 3));
@@ -48,9 +34,9 @@ property westServiced = Pmax(<> (west.timesServiced >= 3));
 
 property Runs1 = Pmax(<> (optimalRuns == 1));		//Probablility that there was at least 1 cycle where all buffers were serviced
 property Runs2 = Pmax(<> (optimalRuns == 2));		//Probablility that there was at least 2 cycles where all buffers were serviced
-property Runs3 = Pmax(<> (optimalRuns == 3));		//Probablility that there was at least 3 cycles where all buffers were serviced
-property Runs4 = Pmax(<> (optimalRuns == 4));		//Probablility that there was at least 4 cycles where all buffers were serviced
-property Runs5 = Pmax(<> (optimalRuns == 5));		//Probablility that there was at least 5 cycles where all buffers were serviced
+//property Runs3 = Pmax(<> (optimalRuns == 3));		//Probablility that there was at least 3 cycles where all buffers were serviced
+//property Runs4 = Pmax(<> (optimalRuns == 4));		//Probablility that there was at least 4 cycles where all buffers were serviced
+//property Runs5 = Pmax(<> (optimalRuns == 5));		//Probablility that there was at least 5 cycles where all buffers were serviced
 // ------ End: properties ---------
 
 
@@ -94,19 +80,25 @@ process Clock()
 	
 }
 
-// -------------------------------------------------------------------- Buffer ------------------------------------------------------------------------------------------------------
 
-//Adds a new random value between 8 and 11 to the buffer
-process addBuffer()
+
+//Adds a new random value to the buffer
+// Parralel process 
+/*process addBuffer()
 {  
-	do {
+	do{
 		tick{=
-		northB = enqueue(DiscreteUniform(1, 3) , northB),
-		eastB = enqueue((DiscreteUniform(1, 3) + 1) % 4, eastB),
-		southB = enqueue((DiscreteUniform(1, 3) + 2) % 4, southB),
-		westB = enqueue(DiscreteUniform(0, 2), westB)
-		=};
+		//a[0].buff = enqueue((DiscreteUniform(1, 3) + a[0].id) % 4, a[0].buff),
+		//a[1].buff = enqueue((DiscreteUniform(1, 3) + a[1].id) % 4, a[1].buff),
+		//a[2].buff = enqueue((DiscreteUniform(1, 3) + a[2].id) % 4, a[2].buff),
+		//a[3].buff = enqueue((DiscreteUniform(1, 3) + a[3].id) % 4, a[3].buff)
 		
+		a[0].buff = enqueue(3, a[0].buff),
+		a[1].buff = enqueue(3, a[1].buff),
+		a[2].buff = enqueue(3, a[2].buff),
+		a[3].buff = enqueue(1, a[3].buff)
+		=};
+	
 		if (clk >= clkUpper) {
 			stop
 		}
@@ -114,27 +106,19 @@ process addBuffer()
 			tau
 		}
 	}
+  
 }
+*/
 
-//assigns the tail of the buffer to v and removes the tail of the buffer
-process getBuffer(int selection)
-{
-	if (selection == 0) {
-		{= v = peekFront(northB) =};						//See if the states can be reduced!
-		{= northB = dequeue(northB) =}
-	}
-	else if (selection == 1){
-		{= v = peekFront(eastB) =};						//See if the states can be reduced!
-		{= eastB = dequeue(eastB) =}
-	}
-	else if (selection == 2){
-		{= v = peekFront(southB) =};						//See if the states can be reduced!
-		{= southB = dequeue(southB) =}
-	}
-	else {
-		{= v = peekFront(westB) =};						//See if the states can be reduced!
-		{= westB = dequeue(westB) =}
-	}
+//In Line process
+process addBuffer()
+{  
+	{=
+	a[0].buff = enqueue((DiscreteUniform(1, 3) + a[0].id) % 4, a[0].buff),
+	a[1].buff = enqueue((DiscreteUniform(1, 3) + a[1].id) % 4, a[1].buff),
+	a[2].buff = enqueue((DiscreteUniform(1, 3) + a[2].id) % 4, a[2].buff),
+	a[3].buff = enqueue((DiscreteUniform(1, 3) + a[3].id) % 4, a[3].buff)
+	=}
 }
 
 
@@ -143,6 +127,7 @@ process getBuffer(int selection)
 //Main process for the arbiter ---------------------------------------------------------------------------------------------------------------------------------
 process Arbiter(){
 	initialize();
+	addBuffer();
 	
 	//runtime loop
 	do {
@@ -227,11 +212,11 @@ process Arbiter(){
 		temp[a[0].priority] = a[0],
 		temp[a[1].priority] = a[1],
 		temp[a[2].priority] = a[2],
-		temp[a[3].priority] = a[3]
+		temp[a[3].priority] = a[3] 
 		=};
 		
 		tick {= a = temp =};
-		
+		addBuffer();
 		
 		if (clk >= clkUpper) {
 			stop
@@ -269,9 +254,9 @@ process initialize(){
 //Sets the new priority value of buffer a[i] and updates the value if the buffer was serviced ------------------------------------------------------------------
 process setPriority(int i){
 	if (a[i].serviced == true){
-		getBuffer(i);
 		{= 
-		a[i].val = v,		//deque buffer
+		a[i].val = peekFront(a[i].buff),		//Update value from buffer
+		a[i].buff = dequeue(a[i].buff),			//deque buffer
 		a[i].priority = i + unserviced 				//Set new priority
 		=}
 	}
@@ -288,5 +273,5 @@ process setPriority(int i){
 par{
 ::	Clock()
 ::	Arbiter()
-:: 	addBuffer()
+//::	addBuffer()
 }
